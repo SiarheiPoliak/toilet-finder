@@ -1,0 +1,55 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.24.3'
+          channel: 'stable'
+
+      - name: Generate Android project and configure permissions
+        run: |
+          # Backup custom application code
+          cp lib/main.dart /tmp/main.dart
+
+          # Generate complete Flutter Android project structure
+          flutter create --platforms=android --project-name toilet_finder .
+
+          # Restore custom application code
+          cp /tmp/main.dart lib/main.dart
+
+          # Add required libraries
+          flutter pub add flutter_map:7.0.2 latlong2:0.9.1 geolocator:13.0.1 http:1.2.2
+
+          # Inject Internet and GPS permissions into AndroidManifest.xml
+          sed -i 's/<application/<uses-permission android:name="android.permission.INTERNET"\/>\n    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"\/>\n    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"\/>\n    <application/' android/app/src/main/AndroidManifest.xml
+
+          # Ensure compileSdk is set to 34 for plugin compatibility
+          sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 34/g' android/app/build.gradle
+          sed -i 's/compileSdkVersion flutter.compileSdkVersion/compileSdkVersion 34/g' android/app/build.gradle
+
+      - name: Build release APK
+        run: flutter build apk --release
+
+      - name: Upload compiled APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: toilet-finder-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
